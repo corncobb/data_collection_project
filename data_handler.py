@@ -13,6 +13,7 @@ The program will also send the data over to a webserver to desplay date in realt
 TODO: 
 - Add MQTT protocol to transmit data to webserver
 - If WIFI doesn't connect, make a function to connect.
+- Instead of calculating downtime by encoder distance, maybe calculate it by angular velocity...
 
 DONE:
 - make raspberry pi autoboot to script 
@@ -52,7 +53,7 @@ else:
         print("Problem importing spidev and or RPI.GPIO. Make sure you are on Raspberry Pi and spidev is installed")
 
 # Token for Dropbox
-TOKEN = credentials.login['token']
+TOKEN = credentials.login['token'] #token is hidden in a different file so you cannot see it ;)
 
 # The string variable for the identifying machine. This is used 
 # to make the filepaths and should be "Machine1", "Machine2", "Machine3"...
@@ -333,7 +334,7 @@ def log_data(): #Logs the necessary data to the file
 
                 total_encoder_distance = encodercount/1000 #The encoder has 500 pulses per revolution and circumference is 6 inches so dividing by 1000 will give total distance in feet
 
-                encoder_difference = get_encoder_difference(encodercount) #gets the difference of the encoder
+                encoder_difference = get_encoder_difference(total_encoder_distance) #gets the difference of the encoder
 
                 knife_count = count.value #current count of the knife
 
@@ -350,7 +351,7 @@ def log_data(): #Logs the necessary data to the file
                 totalShiftTime += 1 #increments total shift time by 1 because being logged by every 1 minute
                 shiftTimeTime += timedelta(minutes=1) #increments total shift time by 1 minute. This is the actual time variable!!
 
-                if encoder_difference > 2: #if the difference in the encoder is greater than 2 feet then the machine is running 
+                if encoder_difference > 30: #if the difference in the encoder is greater than 30 feet then the machine is running 
                     totalOperationTime += 1
                     operationTimeTime += timedelta(minutes=1) #increments total operating time by 1 minute IF THE ENCODER DIFFERENCE IS NOT 0 (meaning the encoder has moved since last read). This is the actual time variable!!
                     downTimeState = False
@@ -434,12 +435,12 @@ def reset_values():  #Function for resetting the values back to 0
     else:
         print("Not a working day so values were not reset. Doesn't matter because they will be reset before next shift.")
 
-def get_encoder_difference(encodercount): 
+def get_encoder_difference(total_encoder_distance): 
 
     global lastEncoderCount
 
-    dif = encodercount - lastEncoderCount
-    lastEncoderCount = encodercount
+    dif = total_encoder_distance - lastEncoderCount
+    lastEncoderCount = total_encoder_distance
     return dif
 
 def cpm_by_operation_time(): #cycles per minute by operation time
