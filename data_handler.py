@@ -53,7 +53,9 @@ else:
         print("Problem importing spidev and or RPI.GPIO. Make sure you are on Raspberry Pi and spidev is installed")
 
 # Token for Dropbox
-TOKEN = credentials.login['token'] #token is hidden in a different file so you cannot see it ;)
+TOKEN = credentials.credentials['token'] #token is hidden in a different file so you cannot see it ;)
+
+BROKER = credentials.credentials['broker']
 
 # The string variable for the identifying machine. This is used 
 # to make the filepaths and should be "Machine1", "Machine2", "Machine3"...
