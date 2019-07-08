@@ -2,7 +2,7 @@
 
 '''
 Author: Cameron Cobb
-Last updated: 4/22/2019
+Last updated: 7/8/2019
 Email: Cameron@CCCreno.com
 
 Purpose: 
@@ -11,9 +11,7 @@ then add the data into a .txt file. At the end of the day at exactly 2:01, the .
 The program will also send the data over to a webserver to desplay date in realtime. That will be implemented soon.
 
 TODO: 
-- Add MQTT protocol to transmit data to webserver
 - If WIFI doesn't connect, make a function to connect.
-- Instead of calculating downtime by encoder distance, maybe calculate it by angular velocity...
 
 DONE:
 - make raspberry pi autoboot to script 
@@ -39,6 +37,7 @@ import dropbox
 import credentials
 from dropbox.files import WriteMode
 from dropbox.exceptions import ApiError, AuthError
+import paho.mqtt.client as mqtt
 
 if os.name == 'nt':
     print("Not importing spidev and RPI.GPIO. These libraries only work on Rasp Pi")
@@ -60,7 +59,9 @@ BROKER = credentials.credentials['broker']
 # The string variable for the identifying machine. This is used 
 # to make the filepaths and should be "Machine1", "Machine2", "Machine3"...
 # NO machine should have the same identifying variable.
-machineNumber = "Machine1"
+machineNumber = "Machine2"
+
+topicRoot = "data/" + machineNumber
 
 # Days in which to log to file and upload. Add or remove days accordingly
 workingDay = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
@@ -88,7 +89,8 @@ totalOperationTime = 0 #total opperation time is set to 0
 downTimeState = False #boolean state of the machine. If "True" then the machine is in down time
 shiftTimeTime = timedelta(minutes=0) #Actual shift time and is in the time format (e.g. 0:03:00) 
 operationTimeTime = timedelta(minutes=0) #Same as above but for operation time...
-downTimeTime = timedelta(minutes=0) #yeah...
+downTime = 0 #yeah...
+state = "OFF"
 
 # Pin variables, both on GPIO not "Board" config
 ORANGE_LED_PIN = 20
@@ -289,9 +291,26 @@ def log_error(): # This function is to log an error to a file. This is usually c
 
 def log_data(): #Logs the necessary data to the file
 
-    global downTimeState, lastEncoderCount, totalShiftTime, totalOperationTime, shiftTimeTime, operationTimeTime, downTimeTime
+    global downTimeState, lastEncoderCount, totalShiftTime, totalOperationTime, shiftTimeTime, operationTimeTime, downTime, state
 
     print(datetime.now()) # Not necessary. Just wanted to include this to help debug
+
+    nowdate = datetime.now().strftime("%m-%d-%Y")
+    nowtime = datetime.now().strftime("%H:%M:%S")
+
+    precision = 2 #how many decimals to round
+
+    encodercount = encoder.readCounter() #gets the encoder count and stores it in encodercount variable
+
+    total_encoder_distance = encodercount/1000 #The encoder has 500 pulses per revolution and circumference is 6 inches so dividing by 1000 will give total distance in feet
+
+    encoder_difference = get_encoder_difference(total_encoder_distance) #gets the difference of the encoder
+
+    knife_count = count.value #current count of the knife
+
+    CPM_BY_OPERATION = cpm_by_operation_time()
+
+    CPM_BY_SHIFT = cpm_by_shift_time()
 
     try:
         if check_in_interval(time(6, 00), time(14, 00), datetime.now().time()) and is_working_day(): #Only logs the data between 6:00 AM - 2:00 PM
@@ -326,23 +345,9 @@ def log_data(): #Logs the necessary data to the file
                             "Operation Time (shift time-downtime),Shift time,"
                             "Total Shift Time (minutes),Total Operation Time (minutes)\n") 
 
-                
-                nowdate = datetime.now().strftime("%m-%d-%Y")
-                nowtime = datetime.now().strftime("%H:%M:%S")
-
-                precision = 2 #how many decimals to round
-
-                encodercount = encoder.readCounter() #gets the encoder count and stores it in encodercount variable
-
-                total_encoder_distance = encodercount/1000 #The encoder has 500 pulses per revolution and circumference is 6 inches so dividing by 1000 will give total distance in feet
-
-                encoder_difference = get_encoder_difference(total_encoder_distance) #gets the difference of the encoder
-
-                knife_count = count.value #current count of the knife
-
                 #This is how data will be logged to .txt file
-                f.write(nowdate + ',' + nowtime + ',' + str(knife_count) + ',' + str(round(cpm_by_operation_time(), precision)) + ',' 
-                        + str(round(cpm_by_shift_time(), precision)) + ',' + str(round(total_encoder_distance, precision)) + ',' + str(downTimeTime) + ','
+                f.write(nowdate + ',' + nowtime + ',' + str(knife_count) + ',' + str(round(CPM_BY_OPERATION, precision)) + ',' 
+                        + str(round(CPM_BY_SHIFT, precision)) + ',' + str(round(total_encoder_distance, precision)) + ',' + str(timedelta(minutes = downTime)) + ','
                         + str(operationTimeTime) + ',' + str(shiftTimeTime) + ',' + str(totalShiftTime) + ','
                         + str(totalOperationTime) + '\n') #line that writes to file. MAKE SURE YOU PUT total_encoder_distance() again!!
 
@@ -357,16 +362,24 @@ def log_data(): #Logs the necessary data to the file
                     totalOperationTime += 1
                     operationTimeTime += timedelta(minutes=1) #increments total operating time by 1 minute IF THE ENCODER DIFFERENCE IS NOT 0 (meaning the encoder has moved since last read). This is the actual time variable!!
                     downTimeState = False
+                    state = "RUNNING"
 
-                else: #if the difference in the encoder is less than 2 then it is considered "down time".
+                else: #if the difference in the encoder is less than 30 then it is considered "down time".
                     downTimeState = True
-                    downTimeTime += timedelta(minutes=1) #increments total down time by 1 minute IF THE ENCODER DIFFERENCE IS 0 (meaning the encoder hasn't moved since last read). This is the actual time variable!
-
+                    downTime += 1 #increments total down time by 1 minute IF THE ENCODER DIFFERENCE IS 0 (meaning the encoder hasn't moved since last read). This is the actual time variable!
+                    state = "DOWN"
                 print("Knife count: " + str(knife_count) + " Encoder distance: " + str(round(total_encoder_distance, precision))) #prints to terminal for debugging
+
+                
 
         else:
             print("Time was not in interval or is not in workingDay so data was not logged")
             GPIO.output(ORANGE_LED_PIN, GPIO.LOW) #turns off Orange LED to signify that the logging is not in progress
+            state = "OFF"
+
+        data = "2"+"$"+state+"$"+str(datetime.datetime.now())+"$"+str(knife_count)+"$"+str(CPM_BY_OPERATION)+"$"+str(CPM_BY_SHIFT)+"$"+str(total_encoder_distance)+"$"+str(downTime)+"$"+str(totalShiftTime)+"$"+str(totalOperationTime)
+        publish.single(topicRoot, data, hostname=broker)
+
     except:
         log_error()
 
@@ -417,7 +430,7 @@ def reset_values():  #Function for resetting the values back to 0
 
     if is_working_day():  #Not really necessary but I just wanted to add it
 
-        global count, lastEncoderCount, totalShiftTime, totalOperationTime, shiftTimeTime, operationTimeTime, downTimeTime
+        global count, lastEncoderCount, totalShiftTime, totalOperationTime, shiftTimeTime, operationTimeTime, downTime
 
         with count.get_lock(): #because the laser counter is running on a separate proccess, this is the method to reset it
             while count.value != 0:
@@ -432,7 +445,7 @@ def reset_values():  #Function for resetting the values back to 0
         totalOperationTime = 0
         shiftTimeTime = timedelta(minutes=0) #resets actual shift time 
         operationTimeTime = timedelta(minutes=0) #resets actual operation time
-        downTimeTime = timedelta(minutes=0) #resets actual down time time
+        downTime = 0 #resets actual down time time
 
     else:
         print("Not a working day so values were not reset. Doesn't matter because they will be reset before next shift.")
