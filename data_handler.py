@@ -14,6 +14,7 @@ TODO:
 - If WIFI doesn't connect, make a function to connect.
 
 DONE:
+- Implement MQTT
 - make raspberry pi autoboot to script 
 - Make sure to add total_encoder_distance() in the f.write in log_data() again
 - upload files to dropbox MAKE SURE THERE IS A RASPBERRY PI PATH
@@ -37,7 +38,7 @@ import dropbox
 import credentials
 from dropbox.files import WriteMode
 from dropbox.exceptions import ApiError, AuthError
-import paho.mqtt.client as mqtt
+import paho.mqtt.publish as publish
 
 if os.name == 'nt':
     print("Not importing spidev and RPI.GPIO. These libraries only work on Rasp Pi")
@@ -59,7 +60,7 @@ BROKER = credentials.credentials['broker']
 # The string variable for the identifying machine. This is used 
 # to make the filepaths and should be "Machine1", "Machine2", "Machine3"...
 # NO machine should have the same identifying variable.
-machineNumber = "Machine2"
+machineNumber = "machine2"
 
 topicRoot = "data/" + machineNumber
 
@@ -377,8 +378,15 @@ def log_data(): #Logs the necessary data to the file
             GPIO.output(ORANGE_LED_PIN, GPIO.LOW) #turns off Orange LED to signify that the logging is not in progress
             state = "OFF"
 
-        data = "2"+"$"+state+"$"+str(datetime.datetime.now())+"$"+str(knife_count)+"$"+str(CPM_BY_OPERATION)+"$"+str(CPM_BY_SHIFT)+"$"+str(total_encoder_distance)+"$"+str(downTime)+"$"+str(totalShiftTime)+"$"+str(totalOperationTime)
-        publish.single(topicRoot, data, hostname=broker)
+        #This is to format the data being sent over MQTT
+        data = ("2"+"$"+state+"$"+str(datetime.now())+"$"+str(knife_count)+"$"+str(round(CPM_BY_OPERATION, precision))+
+                "$"+str(round(CPM_BY_SHIFT, precision))+"$"+str(round(total_encoder_distance, precision))+"$"+str(downTime)+
+                "$"+str(totalShiftTime)+"$"+str(totalOperationTime))
+        try:
+            publish.single(topicRoot, data, hostname=BROKER)
+            print("Data has been sent via MQTT")
+        except:
+            print("Data was NOT sent")
 
     except:
         log_error()
