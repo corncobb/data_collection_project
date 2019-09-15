@@ -11,7 +11,9 @@ then add the data into a .txt file. At the end of the day at exactly 2:01, the .
 The program will also send the data over to a webserver to desplay date in realtime. That will be implemented soon.
 
 TODO: 
-- If WIFI doesn't connect, make a function to connect.
+- If file does not upload, try again in 5 min
+- If disconnect, restart
+- 
 
 DONE:
 - Implement MQTT
@@ -57,12 +59,15 @@ TOKEN = credentials.credentials['token'] #token is hidden in a different file so
 
 BROKER = credentials.credentials['broker']
 
+uid = 2 #unique id number. CHANGE IF THIS IS A NEW MACHINE.
+
 # The string variable for the identifying machine. This is used 
 # to make the filepaths and should be "Machine1", "Machine2", "Machine3"...
-# NO machine should have the same identifying variable.
-machineNumber = "machine2"
+# NO machine should have the same identity. 
 
-topicRoot = "data/" + machineNumber
+machineID = "machine" + str(uid)
+
+topicRoot = "data/" + machineID
 
 # Days in which to log to file and upload. Add or remove days accordingly
 workingDay = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
@@ -70,13 +75,13 @@ workingDay = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
 
 # File directory for windows systems only. If running on linux based opperating system change file paths accordingly
 if os.name == 'nt':
-    pathdir = "C:\\Users\\Cameron\\Desktop\\" + machineNumber   #put the path on where you want to put the files
+    pathdir = "C:\\Users\\Cameron\\Desktop\\" + machineID   #put the path on where you want to put the files
     errordir = pathdir + "\\error-log"              #error log directory
     sensorDatadir = pathdir + "\\sensor-readings"   #sensor readings directory
 
 else:
     # Linux/Raspberry pi directories
-    pathdir = "/home/pi/Desktop/" + machineNumber           #put the path on where you want to put the files
+    pathdir = "/home/pi/Desktop/" + machineID           #put the path on where you want to put the files
     errordir = pathdir + "/error-log"               #error log directory
     sensorDatadir = pathdir + "/sensor-readings"    #sensor readings directory
 
@@ -292,7 +297,7 @@ def log_error(): # This function is to log an error to a file. This is usually c
 
 def log_data(): #Logs the necessary data to the file
 
-    global downTimeState, lastEncoderCount, totalShiftTime, totalOperationTime, shiftTimeTime, operationTimeTime, downTime, state
+    global downTimeState, lastEncoderCount, totalShiftTime, totalOperationTime, shiftTimeTime, operationTimeTime, downTime, state, uid
 
     print(datetime.now()) # Not necessary. Just wanted to include this to help debug
 
@@ -379,7 +384,7 @@ def log_data(): #Logs the necessary data to the file
             state = "OFF"
 
         #This is to format the data being sent over MQTT
-        data = ("2"+"$"+state+"$"+str(datetime.now())+"$"+str(knife_count)+"$"+str(round(CPM_BY_OPERATION, precision))+
+        data = (str(uid)+"$"+state+"$"+str(datetime.now())+"$"+str(knife_count)+"$"+str(round(CPM_BY_OPERATION, precision))+
                 "$"+str(round(CPM_BY_SHIFT, precision))+"$"+str(round(total_encoder_distance, precision))+"$"+str(downTime)+
                 "$"+str(totalShiftTime)+"$"+str(totalOperationTime))
         try:
@@ -505,8 +510,8 @@ def upload_files_to_dropbox():
             errorFile = errordir + "/errorlog " + str(datetime.now().strftime("%m-%d-%y")) + ".txt" 
 
         #Paths on Dropbox to upload the LOCALFILE and errorFile variables
-        backupPath = '/' + machineNumber + '/sensor-readings/' + str(datetime.now().strftime("%m-%d-%y")) + '.txt' 
-        errorPath = '/' + machineNumber + '/error-log/error ' + str(datetime.now().strftime("%m-%d-%y")) + '.txt'
+        backupPath = '/' + machineID + '/sensor-readings/' + str(datetime.now().strftime("%m-%d-%y")) + '.txt' 
+        errorPath = '/' + machineID + '/error-log/error ' + str(datetime.now().strftime("%m-%d-%y")) + '.txt'
 
         try:
             print("Creating a Dropbox object...")

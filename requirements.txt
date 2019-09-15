@@ -9,3 +9,6 @@ requests == 2.20.1
 
 # datahandler.py: 7
 schedule == 0.5.0
+
+# datahandler.py
+paho-mqtt == 1.4.0
