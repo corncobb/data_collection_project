@@ -5,7 +5,7 @@
 dropbox == 9.3.0
 
 # datahandler.py: 6,9
-requests == 2.20.1
+requests == 2.31.0
 
 # datahandler.py: 7
 schedule == 0.5.0
